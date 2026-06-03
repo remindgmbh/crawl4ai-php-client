@@ -43,7 +43,7 @@ class CrawlSitemapXmlCommand extends AbstractCrawlCommand
         $this->writeOutputFile($markdown, $sitemapUrl, $outputFileNamePrefix, $fileCompression);
 
         $output->writeln('Process duration: ' . (time() - $startTime) . 's');
-        
+
         return Command::SUCCESS;
     }
 

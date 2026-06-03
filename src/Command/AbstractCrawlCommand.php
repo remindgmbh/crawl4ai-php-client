@@ -97,7 +97,7 @@ abstract class AbstractCrawlCommand extends Command
                 $filesystem->remove($filePath);
             }
         } catch (IOExceptionInterface $exception) {
-            echo "An error occurred while creating file at " . $exception->getPath();
+            echo 'An error occurred while creating file at ' . $exception->getPath();
         }
     }
 }
