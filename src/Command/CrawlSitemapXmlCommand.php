@@ -27,12 +27,15 @@ class CrawlSitemapXmlCommand extends AbstractCrawlCommand
         $output->writeln('Reading sitemap: ' . $sitemapUrl);
         $urls = $this->extractUrlsFromSitemap($sitemapUrl);
         $output->writeln('URLs found: ' . count($urls));
-
+        $output->writeln(sprintf('Crawling in batches of %d...', self::BATCH_SIZE));
 
         $markdown = json_encode(
             $this->crawl(
                 urls: $urls,
-                locale: $locale
+                locale: $locale,
+                onBatchComplete: function (int $current, int $total, int $batchSize) use ($output) {
+                    $output->writeln(sprintf('Batch %d/%d (%d URLs) completed.', $current, $total, $batchSize));
+                }
             ),
             JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         );

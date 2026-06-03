@@ -12,6 +12,8 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 abstract class AbstractCrawlCommand extends Command
 {
+    protected const BATCH_SIZE = 10;
+
     protected const DEFAULT_CRAWLER_CONFIG = [
         'cache_mode' => 'BYPASS',
         'word_count_threshold' => 10,
@@ -42,16 +44,34 @@ abstract class AbstractCrawlCommand extends Command
         parent::__construct();
     }
 
-    protected function crawl(array $urls, string $endpoint = '/crawl', string $locale = 'en-EN'): array
+    protected function crawl(array $urls, string $endpoint = '/crawl', string $locale = 'en-EN', ?callable $onBatchComplete = null): array
     {
-        $response = $this->client->request('POST', $this->baseUrl . $endpoint, [
-            'json' => [
-                'urls' => $urls,
-                'crawler_config' => array_merge(self::DEFAULT_CRAWLER_CONFIG, ['locale' => $locale]),
-            ],
-        ]);
+        $batches = array_chunk($urls, self::BATCH_SIZE);
+        $allResults = [];
+        $success = true;
 
-        return $response->toArray();
+        foreach ($batches as $batchIndex => $batchUrls) {
+            $response = $this->client->request('POST', $this->baseUrl . $endpoint, [
+                'json' => [
+                    'urls' => $batchUrls,
+                    'crawler_config' => array_merge(self::DEFAULT_CRAWLER_CONFIG, ['locale' => $locale]),
+                ],
+                'timeout' => 300,
+            ]);
+
+            $data = $response->toArray();
+            $success = $success && ($data['success'] ?? false);
+            $allResults = array_merge($allResults, $data['results'] ?? []);
+
+            if ($onBatchComplete) {
+                $onBatchComplete($batchIndex + 1, count($batches), count($batchUrls));
+            }
+        }
+
+        return [
+            'success' => $success,
+            'results' => $allResults,
+        ];
     }
 
     protected function writeOutputFile(string $content, string $sitemapUrl, string $outputFileNamePrefix, bool $fileCompression): void
@@ -77,7 +97,7 @@ abstract class AbstractCrawlCommand extends Command
                 $filesystem->remove($filePath);
             }
         } catch (IOExceptionInterface $exception) {
-            echo "An error occurred while creating your directory at " . $exception->getPath();
+            echo "An error occurred while creating file at " . $exception->getPath();
         }
     }
 }
