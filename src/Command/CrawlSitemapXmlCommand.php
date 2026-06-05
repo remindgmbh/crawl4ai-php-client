@@ -23,19 +23,19 @@ class CrawlSitemapXmlCommand extends AbstractCrawlCommand
         $outputFileNamePrefix = $input->getOption('outputFileNamePrefix');
         $locale = $input->getOption('locale');
         $fileCompression = $input->getOption('fileCompression');
+        $timeout = (int) $input->getOption('timeout');
+        $markdownOnly = $input->getOption('markdownOnly');
 
         $output->writeln('Reading sitemap: ' . $sitemapUrl);
         $urls = $this->extractUrlsFromSitemap($sitemapUrl);
         $output->writeln('URLs found: ' . count($urls));
-        $output->writeln(sprintf('Crawling in batches of %d...', self::BATCH_SIZE));
 
         $markdown = json_encode(
             $this->crawl(
                 urls: $urls,
                 locale: $locale,
-                onBatchComplete: function (int $current, int $total, int $batchSize) use ($output) {
-                    $output->writeln(sprintf('Batch %d/%d (%d URLs) completed.', $current, $total, $batchSize));
-                }
+                timeout: $timeout,
+                markdownOnly: $markdownOnly,
             ),
             JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         );
@@ -53,7 +53,9 @@ class CrawlSitemapXmlCommand extends AbstractCrawlCommand
             ->addArgument('sitemapUrl', InputArgument::REQUIRED)
             ->addOption('outputFileNamePrefix', null, InputOption::VALUE_OPTIONAL, 'Prefix for the output file name', 'crawl')
             ->addOption('locale', null, InputOption::VALUE_OPTIONAL, 'Locale for the crawl', 'en-EN')
-            ->addOption('fileCompression', null, InputOption::VALUE_NONE, 'Compress output file with gzip');
+            ->addOption('fileCompression', null, InputOption::VALUE_NONE, 'Compress output file with gzip')
+            ->addOption('timeout', null, InputOption::VALUE_OPTIONAL, 'HTTP request timeout in seconds', self::DEFAULT_TIMEOUT)
+            ->addOption('markdownOnly', null, InputOption::VALUE_NONE, 'Output only markdown content without metadata');
     }
 
     protected function extractUrlsFromSitemap(string $sitemapUrl): array
