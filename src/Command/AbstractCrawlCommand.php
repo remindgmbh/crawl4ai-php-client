@@ -16,25 +16,28 @@ abstract class AbstractCrawlCommand extends Command
     protected const DEFAULT_LOCALE = 'en-EN';
     protected const DEFAULT_CRAWLER_CONFIG = [
         'cache_mode' => 'BYPASS',
-        'word_count_threshold' => 10,
-        'excluded_tags' => ['nav', 'footer', 'header', 'aside'],
+        'excluded_tags' => ['nav', 'footer', 'aside', 'metadata'],
         'remove_overlay_elements' => true,
         'remove_consent_popups' => true,
         'markdown_generator' => [
             'type' => 'DefaultMarkdownGenerator',
             'params' => [
                 'content_source' => 'cleaned_html',
+                'options' => [
+                    'ignore_links' => true,
+                ],
                 'content_filter' => [
                     'type' => 'PruningContentFilter',
                     'params' => [
                         'threshold' => 0.5,
                         'threshold_type' => 'fixed',
-                        'min_word_threshold' => 10,
+                        'min_word_threshold' => 1,
                     ],
                 ],
             ],
         ],
     ];
+    protected const MARKDOWN_SEPARATOR = '---';
 
     public function __construct(
         #[Autowire(env: 'CRAWL4AI_BASE_URL')]
@@ -49,24 +52,43 @@ abstract class AbstractCrawlCommand extends Command
         string $endpoint = '/crawl',
         string $locale = self::DEFAULT_LOCALE,
         int $timeout = self::DEFAULT_TIMEOUT,
-        bool $markdownOnly = false
-    ): array {
-        $results = [];
+        bool $markdownOnly = false,
+        ?string $markdownTitle = null,
+        array $excludeUrls = [],
+        string $excludeCssSelectors = '',
+    ): array|string {
+        $results = $markdownOnly ? '' . PHP_EOL : [];
+
+        if ($markdownOnly && $markdownTitle) {
+            $results .= '# ' . $markdownTitle . PHP_EOL . PHP_EOL;
+        }
         foreach ($urls as $url) {
+            if (in_array($url, $excludeUrls, true)) {
+                echo 'Skipping excluded URL: ' . $url . PHP_EOL;
+                continue;
+            }
             $response = $this->client->request('POST', $this->baseUrl . $endpoint, [
                 'json' => [
                     'urls' => [$url],
-                    'crawler_config' => array_merge(self::DEFAULT_CRAWLER_CONFIG, ['locale' => $locale]),
+                    'crawler_config' => array_merge(self::DEFAULT_CRAWLER_CONFIG, ['locale' => $locale, 'excluded_selector' => $excludeCssSelectors]),
                 ],
                 'timeout' => $timeout,
             ]);
             $data = $response->toArray();
 
             if ($markdownOnly) {
-                $results[] = [
-                    'url' => $data['results'][0]['url'] ?? '',
-                    'markdown' => $data['results'][0]['markdown'] ?? '',
-                ];
+                $results .= self::MARKDOWN_SEPARATOR . PHP_EOL;
+
+                if (($data['results'][0]['metadata']['title'] ?? '') !== '') {
+                    $results .= 'title: ' . $data['results'][0]['metadata']['title'] . PHP_EOL;
+                }
+
+                if (($data['results'][0]['metadata']['description'] ?? '') !== '') {
+                    $results .= 'description: ' . $data['results'][0]['metadata']['description'] . PHP_EOL;
+                }
+
+                $results .= $data['results'][0]['markdown']['fit_markdown'] ?? '';
+                $results .= PHP_EOL;
                 continue;
             }
 
@@ -76,12 +98,18 @@ abstract class AbstractCrawlCommand extends Command
         return $results;
     }
 
-    protected function writeOutputFile(string $content, string $sitemapUrl, string $outputFileNamePrefix, bool $fileCompression): void
-    {
+    protected function writeOutputFile(
+        string $content,
+        string $sitemapUrl,
+        string $outputFileNamePrefix,
+        bool $fileCompression,
+        bool $markdownOnly = false
+    ): void {
         $fileName = $outputFileNamePrefix . '-'
             . parse_url($sitemapUrl, PHP_URL_HOST)
             . '-' . date('Y-m-d-H-i-s')
-            . '.json';
+            . '.'
+            . ($markdownOnly ? 'md' : 'json');
 
         $filesystem = new Filesystem();
         $outputDir = __DIR__ . '/../../crawl/output';

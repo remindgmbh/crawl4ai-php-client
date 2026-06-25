@@ -25,22 +25,30 @@ class CrawlSitemapXmlCommand extends AbstractCrawlCommand
         $fileCompression = $input->getOption('fileCompression');
         $timeout = (int) $input->getOption('timeout');
         $markdownOnly = $input->getOption('markdownOnly');
+        $markdownTitle = $input->getOption('markdownTitle');
+        $excludeUrls = $input->getOption('excludeUrls') ? explode(',', $input->getOption('excludeUrls')) : [];
+        $excludeCssSelectors = $input->getOption('excludeCssSelectors');
 
         $output->writeln('Reading sitemap: ' . $sitemapUrl);
         $urls = $this->extractUrlsFromSitemap($sitemapUrl);
         $output->writeln('URLs found: ' . count($urls));
 
-        $markdown = json_encode(
-            $this->crawl(
-                urls: $urls,
-                locale: $locale,
-                timeout: $timeout,
-                markdownOnly: $markdownOnly,
-            ),
+        $crawlResult = $this->crawl(
+            urls: $urls,
+            locale: $locale,
+            timeout: $timeout,
+            markdownOnly: $markdownOnly,
+            markdownTitle: $markdownTitle,
+            excludeUrls: $excludeUrls,
+            excludeCssSelectors: $excludeCssSelectors,
+        );
+
+        $response = $markdownOnly ? $crawlResult : json_encode(
+            $crawlResult,
             JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         );
 
-        $this->writeOutputFile($markdown, $sitemapUrl, $outputFileNamePrefix, $fileCompression);
+        $this->writeOutputFile($response, $sitemapUrl, $outputFileNamePrefix, $fileCompression, $markdownOnly);
 
         $output->writeln('Process duration: ' . (time() - $startTime) . 's');
 
@@ -55,7 +63,10 @@ class CrawlSitemapXmlCommand extends AbstractCrawlCommand
             ->addOption('locale', null, InputOption::VALUE_OPTIONAL, 'Locale for the crawl', 'en-EN')
             ->addOption('fileCompression', null, InputOption::VALUE_NONE, 'Compress output file with gzip')
             ->addOption('timeout', null, InputOption::VALUE_OPTIONAL, 'HTTP request timeout in seconds', self::DEFAULT_TIMEOUT)
-            ->addOption('markdownOnly', null, InputOption::VALUE_NONE, 'Output only markdown content without metadata');
+            ->addOption('markdownOnly', null, InputOption::VALUE_NONE, 'Output only markdown content without metadata')
+            ->addOption('markdownTitle', null, InputOption::VALUE_OPTIONAL, 'Title for the markdown output')
+            ->addOption('excludeUrls', null, InputOption::VALUE_OPTIONAL, 'URLs to exclude from the crawl')
+            ->addOption('excludeCssSelectors', null, InputOption::VALUE_OPTIONAL, 'CSS selectors of elements to exclude from the crawl', '');
     }
 
     protected function extractUrlsFromSitemap(string $sitemapUrl): array
